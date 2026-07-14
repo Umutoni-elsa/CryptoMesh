@@ -2,7 +2,6 @@
 models.py
 
 Shared constants, Diffie-Hellman parameters and helper functions.
-No application logic should be placed here.
 """
 
 import base64
@@ -30,6 +29,7 @@ DH_P = 3231700607131100730033891392642382824881794124114023911284200975140074170
 
 DH_G = 2
 
+# packages the modulus and generator into the object form expected by the cryptography library.
 DH_PARAM_NUMBERS = dh.DHParameterNumbers(DH_P, DH_G)
 DH_PARAMETERS = DH_PARAM_NUMBERS.parameters(default_backend())
 

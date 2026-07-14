@@ -4,7 +4,6 @@ let me = null;
 let myPass = null;
 let activePeer = null;
 let sessionMessages = []; // this session's message history — sessionStorage-backed
-let inspectorOpen = true;
 
 // ===== Notification System =====
 let knownMessages = new Set();
@@ -237,21 +236,13 @@ function renderMessages() {
     row.className = "msg-row " + (sent ? "sent" : "received");
     const color = avatarColor(msg.sender);
 
-    const sigBadge =
-      msg.sig_valid === true
-        ? `<span class="sig-ok">✓ signed</span>`
-        : msg.sig_valid === false
-          ? `<span class="sig-bad">✗ bad sig</span>`
-          : "";
-
     row.innerHTML = `
       <div class="bubble-avatar"
       style="background:${color}22;color:${color}">
         ${initials(msg.sender)}
       </div>
       <div class="bubble-wrap">
-        <div class="bubble"
-             onclick="inspectMessage(${i},'${sent ? "sent" : "recv"}')">
+        <div class="bubble">
           ${msg.plaintext || "<em style='color:var(--text3)'>encrypted</em>"}
         </div>
         <div class="bubble-meta">
@@ -265,10 +256,6 @@ function renderMessages() {
               : "--:--"
           }
         </span>
-          ${sigBadge}
-          <span class="crypto-hint">
-            AES-256-GCM
-          </span>
         </div>
       </div>
     `;
@@ -324,7 +311,8 @@ async function doSend() {
     saveSessionMessages();
 
     renderMessages();
-    showInspector(d.steps, msg, "sent");
+    console.log("📤 Outgoing message:", msg);
+    console.log("🔐 Encryption steps:", d.steps);
   } catch (e) {
     alert("Backend unreachable");
   }
@@ -366,6 +354,18 @@ async function pollMessages() {
       saveSessionMessages();
       renderMessages();
       loadContacts();
+      (d.messages || []).forEach((msg) => {
+        if (msg.steps && msg.plaintext !== undefined) {
+          console.log(`📨 Received message from ${msg.sender}:`, msg.plaintext);
+          console.log("🔐 Decryption steps:", msg.steps);
+          if (msg.sig_valid !== undefined) {
+            console.log(
+              "✓ Signature verification:",
+              msg.sig_valid ? "VALID" : "INVALID",
+            );
+          }
+        }
+      });
     }
   } catch (e) {
     console.log(e);
@@ -387,98 +387,4 @@ function showBrowserNotification(sender) {
       icon: "/static/icon.png",
     });
   }
-}
-
-// ── inspector ──
-function toggleInspector() {
-  inspectorOpen = !inspectorOpen;
-  document
-    .getElementById("inspector")
-    .classList.toggle("hidden", !inspectorOpen);
-}
-
-function inspectMessage(idx, dir) {
-  const all = window._allRendered || [];
-  const msg = all[idx];
-  if (!msg) return;
-  if (!inspectorOpen) {
-    inspectorOpen = true;
-    document.getElementById("inspector").classList.remove("hidden");
-  }
-  showInspector(msg.steps, msg.plaintext, dir, msg);
-}
-
-const stepClasses = {
-  Unlock: "auth",
-  "Diffie-Hellman": "dh",
-  "Station-to-Station": "dh",
-  "Key Derivation": "kdf",
-  "SHA-256": "kdf",
-  AES: "enc",
-  Encryption: "enc",
-  Decryption: "enc",
-  GCM: "enc",
-  RSA: "sig",
-  "RSA-PSS": "sig",
-  Signature: "sig",
-  Verify: "sig",
-  Saved: "save",
-  disk: "save",
-  discarded: "save",
-};
-
-function stepClass(name) {
-  for (const [k, v] of Object.entries(stepClasses))
-    if (name.includes(k)) return v;
-  return "";
-}
-
-function showInspector(steps, plaintext, dir, msg) {
-  const body = document.getElementById("inspector-body");
-  const dirLabel = dir === "sent" ? "↑ outgoing" : "↓ incoming";
-  const dirColor = dir === "sent" ? "var(--accent)" : "var(--green)";
-
-  let html = `
-    <div class="insp-section">
-      <div class="insp-label">Message</div>
-      <div class="algo-badge" style="border-color:${dirColor};color:var(--text)">${dirLabel} — "${plaintext || "(encrypted)"}"</div>
-    </div>
-    <div class="insp-section">
-      <div class="insp-label">Protocol</div>
-  <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
-    <span class="tag tag-dh">DH 2048-bit MODP</span>
-    <span class="tag tag-kdf">SHA-256 KDF</span>
-    <span class="tag tag-enc">AES-256-GCM</span>
-    <span class="tag tag-sig">RSA-PSS</span>
-  </div>
-    </div>
-    <div class="insp-section">
-      <div class="insp-label">Operations (${(steps || []).length} steps)</div>
-  `;
-
-  (steps || []).forEach((s, i) => {
-    const cls = stepClass(s.step);
-    html += `<div class="step-item ${cls}" style="animation-delay:${i * 60}ms">
-      <div class="step-name">${s.step}</div>
-      <div class="step-detail">${s.detail}</div>
-    </div>`;
-  });
-
-  if (!steps || steps.length === 0) {
-    html +=
-      '<div style="color:var(--text3);font-size:0.78rem">No step data available for this message.</div>';
-  }
-
-  html += "</div>";
-
-  if (msg && msg.sig_valid !== undefined) {
-    html += `<div class="insp-section">
-      <div class="insp-label">Integrity</div>
-      <div class="algo-badge" style="border-color:${msg.sig_valid ? "var(--green)" : "var(--red)"}">
-        RSA-PSS signature: ${msg.sig_valid ? "✓ VALID — sender authenticated" : "✗ INVALID — possible forgery"}
-      </div>
-    </div>`;
-  }
-
-  body.innerHTML = html;
 }
